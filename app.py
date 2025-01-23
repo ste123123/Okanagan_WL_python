@@ -21,11 +21,15 @@ def calculate_metrics(data):
     adherence = []
     total_volume = []
     missed_lifts = []
+    total_executed_sets = []
+
 
     for _, row in data.iterrows():
         planned_sets = row.get('Sets', 0)
         completed_sets = sum(pd.notna(row.get(f'Set {i} Reps')) for i in range(1, 9))
         adherence.append(completed_sets / planned_sets if planned_sets > 0 else 0)
+        total_executed_sets.append(completed_sets)  # Count executed sets
+
 
         volume = sum(
             (row.get(f'Set {i} Reps', 0) or 0) * (row.get(f'Set {i} Weight', 0) or 0)
@@ -44,7 +48,66 @@ def calculate_metrics(data):
     data['Adherence'] = adherence
     data['Total Volume'] = total_volume
     data['Missed Lifts'] = missed_lifts
+    data['Total_Executed_Sets'] = total_executed_sets  # Add column here
+
     return data
+
+# Function to calculate personal records (PRs)
+def calculate_personal_records(data):
+    # Filter for the specific categories and 1 rep
+    categories_of_interest = ["Snatch", "Clean", "Jerk", "Clean and Jerk"]
+    filtered_data = data[
+        (data['Category'].isin(categories_of_interest)) & 
+        (data['Reps'] == 1)
+    ]
+    
+    # Group by Category and Exercise, find max Load (PR)
+    personal_records = (
+        filtered_data.groupby(['Category', 'Exercise'])['Load']
+        .max()
+        .reset_index()
+        .rename(columns={'Load': 'Personal Record'})
+    )
+    return personal_records
+
+# Athlete Overview Tab
+def athlete_overview(data):
+    st.title("Athlete Overview")
+
+    # Existing athlete metrics
+    st.header("Weekly Training Metrics")
+    # Example logic here...
+
+    # New Personal Records Section
+    st.header("Personal Records")
+    
+    # Calculate personal records
+    pr_table = calculate_personal_records(data)
+    
+    # Display the table
+    st.table(pr_table)
+
+# Main App
+def main():
+    st.sidebar.title("Navigation")
+    app_mode = st.sidebar.selectbox("Choose the app section:", ["Athlete Overview", "Other Sections"])
+    
+    # Load data (replace with your Excel files processing logic)
+    data = pd.DataFrame({
+        'Category': ['Snatch', 'Clean', 'Jerk', 'Clean', 'Snatch', 'Jerk', 'Clean and Jerk'],
+        'Exercise': ['Power Snatch', 'Full Clean', 'Split Jerk', 'Hang Clean', 'Full Snatch', 'Push Jerk', 'Clean and Jerk'],
+        'Reps': [1, 1, 1, 2, 1, 1, 1],
+        'Load': [90, 120, 100, 110, 95, 105, 130]
+    })  # Replace with actual data loading logic
+    
+    if app_mode == "Athlete Overview":
+        athlete_overview(data)
+    else:
+        st.write("Other Sections Placeholder")
+
+# Run the app
+if __name__ == "__main__":
+    main()
 
 def calculate_all_category_metrics(data):
     """
@@ -55,21 +118,13 @@ def calculate_all_category_metrics(data):
     metrics = []
 
     for category in categories:
-        # Filter data for the current category
         category_data = data[data['Category'] == category]
-
-        # Calculate total prescribed sets
         total_prescribed_sets = category_data['Sets'].sum()
 
-        # Skip categories with no prescribed sets
         if total_prescribed_sets == 0:
             continue
 
-        # Calculate other metrics
-        total_executed_sets = sum(
-            sum(pd.notna(row[f'Set {i} Reps']) for i in range(1, 9))
-            for _, row in category_data.iterrows()
-        )
+        total_executed_sets = category_data['Total_Executed_Sets'].sum()
         total_missed_lifts = category_data['Missed Lifts'].sum()
         total_lifted_weight = sum(
             sum((row[f'Set {i} Reps'] or 0) * (row[f'Set {i} Weight'] or 0)
@@ -85,7 +140,6 @@ def calculate_all_category_metrics(data):
         )
         average_load = round(total_lifted_weight / total_reps, 2) if total_reps > 0 else 0
 
-        # Append metrics for this category
         metrics.append({
             'Category': category,
             'Total Prescribed Sets': round(total_prescribed_sets, 2),
@@ -221,14 +275,17 @@ if folder_path:
 
             if not cumulated_data.empty:
                 # Select category
-                categories = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Squat", "Accessorize"]
+                categories = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Combined C&J", "Squat", "Accessorize"]
                 selected_category = st.selectbox("Select a category:", categories)
 
                 # Filter data by category
-                filtered_data = cumulated_data[cumulated_data['Category'] == selected_category]
+                if selected_category == "Combined C&J":
+                    filtered_data = cumulated_data[cumulated_data['Category'].isin(["Clean", "Jerk", "Clean and Jerk"])]
+                else:
+                    filtered_data = cumulated_data[cumulated_data['Category'] == selected_category]
 
                 if not filtered_data.empty:
-                    # Calculate total lifted weight and reps
+                    # Calculate total lifted weight, reps, and executed sets
                     filtered_data['Total Lifted Weight'] = filtered_data.apply(
                         lambda row: sum((row[f'Set {i} Reps'] or 0) * (row[f'Set {i} Weight'] or 0)
                                         for i in range(1, 9)
@@ -241,15 +298,23 @@ if folder_path:
                                         if pd.notna(row[f'Set {i} Reps'])),
                         axis=1
                     )
+                    filtered_data['Total Executed Sets'] = filtered_data.apply(
+                        lambda row: sum(pd.notna(row[f'Set {i} Reps']) for i in range(1, 9)),
+                        axis=1
+                    )
                     filtered_data['Average Load'] = filtered_data['Total Lifted Weight'] / filtered_data['Total Reps']
                     filtered_data['Average Load'] = filtered_data['Average Load'].fillna(0)
 
                     # Group by week
                     weekly_metrics = filtered_data.groupby('Week').agg(
-                        Average_Load=('Average Load', 'mean'),
-                        Total_Sets=('Sets', 'sum')
+                        Total_Lifted_Weight=('Total Lifted Weight', 'sum'),
+                        Total_Reps=('Total Reps', 'sum'),
+                        Total_Executed_Sets=('Total Executed Sets', 'sum')
                     ).reset_index()
 
+                    # Calculate weighted average load
+                    weekly_metrics['Average_Load'] = weekly_metrics['Total_Lifted_Weight'] / weekly_metrics['Total_Reps']
+                    weekly_metrics['Average_Load'] = weekly_metrics['Average_Load'].fillna(0)  # Handle cases with 0 reps
                     # Plot using Plotly
                     fig = go.Figure()
 
@@ -265,12 +330,12 @@ if folder_path:
                         )
                     )
 
-                    # Add Total Sets as a bar chart (right y-axis)
+                    # Add Total Executed Sets as a bar chart (right y-axis)
                     fig.add_trace(
                         go.Bar(
                             x=weekly_metrics['Week'],
-                            y=weekly_metrics['Total_Sets'],
-                            name='Total Sets',
+                            y=weekly_metrics['Total_Executed_Sets'],
+                            name='Total Executed Sets',
                             marker_color='orange',
                             opacity=0.6,
                             yaxis='y2'
@@ -279,7 +344,7 @@ if folder_path:
 
                     # Update layout for dual y-axes
                     fig.update_layout(
-                        title=f"Average Load and Total Sets for {selected_category} Over Time",
+                        title=f"Average Load and Total Executed Sets for {selected_category} Over Time",
                         xaxis=dict(title='Week'),
                         yaxis=dict(
                             title='Average Load',
@@ -288,7 +353,7 @@ if folder_path:
                             showgrid=True
                         ),
                         yaxis2=dict(
-                            title='Total Sets',
+                            title='Total Executed Sets',
                             titlefont=dict(color='orange'),
                             tickfont=dict(color='orange'),
                             overlaying='y',
@@ -307,6 +372,7 @@ if folder_path:
                     st.warning(f"No data available for the selected category: {selected_category}")
             else:
                 st.write("No data available for the selected athlete.")
+
 
     except Exception as e:
         st.error(f"Error loading data: {e}")
