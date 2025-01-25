@@ -4,6 +4,10 @@ import streamlit as st
 import pandas as pd
 import os
 
+# Set the app to wide layout mode
+# st.set_page_config(layout="wide")
+
+
 def load_data_from_folder(folder_path):
     """Load all Excel files from the specified folder as a dictionary of week-wise data."""
     excel_files = [f for f in os.listdir(folder_path) if f.endswith('.xlsx') and (f.startswith('2025_week_') or f.startswith('2024_week_'))]
@@ -262,19 +266,21 @@ if folder_path:
 
         with tab1:
             st.header("Weekly View")
-
-            # Select week
-            selected_week = st.selectbox("Select a week:", list(weeks_data.keys()))
+            # Select week (sorted alphabetically)
+            selected_week = st.selectbox("Select a week:", sorted(list(weeks_data.keys())), key="select_week")
             week_data = weeks_data[selected_week]
 
-            # Select athlete (sheet)
-            selected_athlete = st.selectbox("Select an athlete:", list(week_data.keys()))
+            # Select athlete (sheet) (sorted alphabetically)
+            selected_athlete = st.selectbox("Select an athlete:", sorted(list(week_data.keys())), key="select_athlete")
             athlete_data = week_data[selected_athlete]
 
-            # Display raw athlete data
-            st.write("### Raw Athlete Data")
-            st.dataframe(athlete_data.fillna(''))  # Replace None/NaN with empty cells
+            st.subheader("Raw Athlete Data")
+            with st.expander("View Raw Athlete Data", expanded=False):  # Default expanded can be set to False
+                # Display raw athlete data
+                st.write("### Raw Athlete Data")
+                st.dataframe(athlete_data.fillna(''))  # Replace None/NaN with empty cells
 
+            st.subheader("Individual session view")
             # Display weekly metrics for all exercise categories
             try:
                 athlete_data = calculate_metrics(athlete_data)  # Ensure metrics are calculated
@@ -325,7 +331,7 @@ if folder_path:
             st.header("Athlete Overview")
 
             # Select athlete
-            athlete_names = list(set(sheet_name for week in weeks_data.values() for sheet_name in week.keys()))
+            athlete_names = sorted(list(set(sheet_name for week in weeks_data.values() for sheet_name in week.keys())))
             selected_athlete = st.selectbox("Select an athlete:", athlete_names)
 
             # Cumulate data
@@ -336,153 +342,160 @@ if folder_path:
                 categories = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Combined C&J", "Squat", "Accessorize"]
                 selected_category = st.selectbox("Select a category:", categories)
 
-                # Filter data by category
-                if selected_category == "Combined C&J":
-                    filtered_data = cumulated_data[cumulated_data['Category'].isin(["Clean", "Jerk", "Clean and Jerk"])]
-                else:
-                    filtered_data = cumulated_data[cumulated_data['Category'] == selected_category]
-
-                if not filtered_data.empty:
-                    # Calculate total lifted weight, reps, and executed sets
-                    filtered_data['Total Lifted Weight'] = filtered_data.apply(
-                        lambda row: sum((row[f'Set {i} Reps'] or 0) * (row[f'Set {i} Weight'] or 0)
-                                        for i in range(1, 9)
-                                        if pd.notna(row[f'Set {i} Reps']) and pd.notna(row[f'Set {i} Weight'])),
-                        axis=1
-                    )
-                    filtered_data['Total Reps'] = filtered_data.apply(
-                        lambda row: sum((row[f'Set {i} Reps'] or 0)
-                                        for i in range(1, 9)
-                                        if pd.notna(row[f'Set {i} Reps'])),
-                        axis=1
-                    )
-                    filtered_data['Total Executed Sets'] = filtered_data.apply(
-                        lambda row: sum(pd.notna(row[f'Set {i} Reps']) for i in range(1, 9)),
-                        axis=1
-                    )
-                    filtered_data['Average Load'] = filtered_data['Total Lifted Weight'] / filtered_data['Total Reps']
-                    filtered_data['Average Load'] = filtered_data['Average Load'].fillna(0)
-
-                    # Group by week
-                    weekly_metrics = filtered_data.groupby('Week').agg(
-                        Total_Lifted_Weight=('Total Lifted Weight', 'sum'),
-                        Total_Reps=('Total Reps', 'sum'),
-                        Total_Executed_Sets=('Total Executed Sets', 'sum')
-                    ).reset_index()
-
-                    # Calculate weighted average load
-                    weekly_metrics['Average_Load'] = weekly_metrics['Total_Lifted_Weight'] / weekly_metrics['Total_Reps']
-                    weekly_metrics['Average_Load'] = weekly_metrics['Average_Load'].fillna(0)  # Handle cases with 0 reps
-                    # Plot using Plotly
-                    fig = go.Figure()
-
-                    # Add Average Load as a line (left y-axis)
-                    fig.add_trace(
-                        go.Scatter(
-                            x=weekly_metrics['Week'],
-                            y=weekly_metrics['Average_Load'],
-                            mode='lines+markers',
-                            name='Average Load',
-                            line=dict(color='blue'),
-                            yaxis='y'
-                        )
-                    )
-
-                    # Add Total Executed Sets as a bar chart (right y-axis)
-                    fig.add_trace(
-                        go.Bar(
-                            x=weekly_metrics['Week'],
-                            y=weekly_metrics['Total_Executed_Sets'],
-                            name='Total Executed Sets',
-                            marker_color='orange',
-                            opacity=0.6,
-                            yaxis='y2'
-                        )
-                    )
-
-                    # Update layout for dual y-axes
-                    fig.update_layout(
-                        title=f"Average Load and Total Executed Sets for {selected_category} Over Time",
-                        xaxis=dict(title='Week'),
-                        yaxis=dict(
-                            title='Average Load',
-                            titlefont=dict(color='blue'),
-                            tickfont=dict(color='blue'),
-                            showgrid=True
-                        ),
-                        yaxis2=dict(
-                            title='Total Executed Sets',
-                            titlefont=dict(color='orange'),
-                            tickfont=dict(color='orange'),
-                            overlaying='y',
-                            side='right',
-                            showgrid=False
-                        ),
-                        legend=dict(x=0.01, y=0.99),
-                        template='plotly_white',
-                        bargap=0.2
-                    )
-
-                    # Show the updated plot in Streamlit
-                    st.plotly_chart(fig, use_container_width=True)
-                #   Display Personal Records
-                st.subheader("Personal Records")
-                try:
-                    pr_table = pd.DataFrame()
-                    # Loop through all weeks to calculate PRs
-                    for week_name, week_data in weeks_data.items():
-                        if selected_athlete in week_data:
-                            athlete_week_data = week_data[selected_athlete]
-                            pr_week_table = calculate_personal_records(athlete_week_data, week_name)
-                            pr_table = pd.concat([pr_table, pr_week_table], ignore_index=True)
-
-                    # Drop duplicates to show only the highest PRs for each category
-                    pr_table = pr_table.sort_values(by=["Category", "Personal Record (1RM Weight)"], ascending=False)
-                    pr_table = pr_table.drop_duplicates(subset="Category", keep="first")
-
-                    # Display the PR table
-                    if not pr_table.empty:
-                        st.table(pr_table)
+                # Display the plot for Average Load and Executed Sets
+                st.subheader(f"Average Load and Total Executed Sets for {selected_category}")
+                with st.expander("View Average Load", expanded=False):  # Default expanded can be set to False
+                    # Filter data by category
+                    if selected_category == "Combined C&J":
+                        filtered_data = cumulated_data[cumulated_data['Category'].isin(["Clean", "Jerk", "Clean and Jerk"])]
                     else:
-                        st.warning("No personal records found for this athlete.")
-                except Exception as e:
-                    st.error(f"Error calculating personal records: {e}")
+                        filtered_data = cumulated_data[cumulated_data['Category'] == selected_category]
+
+                    if not filtered_data.empty:
+                        # Calculate total lifted weight, reps, and executed sets
+                        filtered_data['Total Lifted Weight'] = filtered_data.apply(
+                            lambda row: sum((row[f'Set {i} Reps'] or 0) * (row[f'Set {i} Weight'] or 0)
+                                            for i in range(1, 9)
+                                            if pd.notna(row[f'Set {i} Reps']) and pd.notna(row[f'Set {i} Weight'])),
+                            axis=1
+                        )
+                        filtered_data['Total Reps'] = filtered_data.apply(
+                            lambda row: sum((row[f'Set {i} Reps'] or 0)
+                                            for i in range(1, 9)
+                                            if pd.notna(row[f'Set {i} Reps'])),
+                            axis=1
+                        )
+                        filtered_data['Total Executed Sets'] = filtered_data.apply(
+                            lambda row: sum(pd.notna(row[f'Set {i} Reps']) for i in range(1, 9)),
+                            axis=1
+                        )
+                        filtered_data['Average Load'] = filtered_data['Total Lifted Weight'] / filtered_data['Total Reps']
+                        filtered_data['Average Load'] = filtered_data['Average Load'].fillna(0)
+
+                        # Group by week
+                        weekly_metrics = filtered_data.groupby('Week').agg(
+                            Total_Lifted_Weight=('Total Lifted Weight', 'sum'),
+                            Total_Reps=('Total Reps', 'sum'),
+                            Total_Executed_Sets=('Total Executed Sets', 'sum')
+                        ).reset_index()
+
+                        # Calculate weighted average load
+                        weekly_metrics['Average_Load'] = weekly_metrics['Total_Lifted_Weight'] / weekly_metrics['Total_Reps']
+                        weekly_metrics['Average_Load'] = weekly_metrics['Average_Load'].fillna(0)  # Handle cases with 0 reps
+                        
+                        # Plot using Plotly
+                        
+                        fig = go.Figure()
+
+                        # Add Average Load as a line (left y-axis)
+                        fig.add_trace(
+                            go.Scatter(
+                                x=weekly_metrics['Week'],
+                                y=weekly_metrics['Average_Load'],
+                                mode='lines+markers',
+                                name='Average Load',
+                                line=dict(color='blue'),
+                                yaxis='y'
+                            )
+                        )
+
+                        # Add Total Executed Sets as a bar chart (right y-axis)
+                        fig.add_trace(
+                            go.Bar(
+                                x=weekly_metrics['Week'],
+                                y=weekly_metrics['Total_Executed_Sets'],
+                                name='Total Executed Sets',
+                                marker_color='orange',
+                                opacity=0.6,
+                                yaxis='y2'
+                            )
+                        )
+
+                        # Update layout for dual y-axes
+                        fig.update_layout(
+                            title=f"Average Load and Total Executed Sets for {selected_category} Over Time",
+                            xaxis=dict(title='Week'),
+                            yaxis=dict(
+                                title='Average Load',
+                                titlefont=dict(color='blue'),
+                                tickfont=dict(color='blue'),
+                                showgrid=True
+                            ),
+                            yaxis2=dict(
+                                title='Total Executed Sets',
+                                titlefont=dict(color='orange'),
+                                tickfont=dict(color='orange'),
+                                overlaying='y',
+                                side='right',
+                                showgrid=False
+                            ),
+                            legend=dict(x=0.01, y=0.99),
+                            template='plotly_white',
+                            bargap=0.2
+                        )
+
+                        # Show the updated plot in Streamlit
+                        st.plotly_chart(fig, use_container_width=True)
+                    #   Display Personal Records
+                st.subheader("Personal Records")
+                with st.expander("View Personal Records", expanded=False):  # Default expanded can be set to False
+                    try:
+                        pr_table = pd.DataFrame()
+                        # Loop through all weeks to calculate PRs
+                        for week_name, week_data in weeks_data.items():
+                            if selected_athlete in week_data:
+                                athlete_week_data = week_data[selected_athlete]
+                                pr_week_table = calculate_personal_records(athlete_week_data, week_name)
+                                pr_table = pd.concat([pr_table, pr_week_table], ignore_index=True)
+
+                        # Drop duplicates to show only the highest PRs for each category
+                        pr_table = pr_table.sort_values(by=["Category", "Personal Record (1RM Weight)"], ascending=False)
+                        pr_table = pr_table.drop_duplicates(subset="Category", keep="first")
+
+                        # Display the PR table
+                        if not pr_table.empty:
+                            st.table(pr_table)
+                        else:
+                            st.warning("No personal records found for this athlete.")
+                    except Exception as e:
+                        st.error(f"Error calculating personal records: {e}")
 
                 # Calculate the number of performed training sessions
                 sessions_per_week = calculate_training_sessions_per_week(weeks_data, selected_athlete)
                 # Add a subheader for the new plot
+
                 st.subheader("Training Sessions Per Week")
-
+                with st.expander("View Training Sessions Plot", expanded=False):  # Default expanded can be set to False
                 # Check if there is data to plot
-                if not sessions_per_week.empty:
-                    # Plot using Plotly
-                    fig_sessions = go.Figure()
+                    if not sessions_per_week.empty:
+                        # Plot using Plotly
+                        fig_sessions = go.Figure()
 
-                    # Add a bar chart for performed training sessions
-                    fig_sessions.add_trace(
-                        go.Bar(
-                            x=sessions_per_week['Week'],
-                            y=sessions_per_week['Performed Sessions'],
-                            name='Performed Training Sessions',
-                            marker_color='green'
+                        # Add a bar chart for performed training sessions
+                        fig_sessions.add_trace(
+                            go.Bar(
+                                x=sessions_per_week['Week'],
+                                y=sessions_per_week['Performed Sessions'],
+                                name='Performed Training Sessions',
+                                marker_color='green'
+                            )
                         )
-                    )
 
-                    # Update layout
-                    fig_sessions.update_layout(
-                        title="Number of Performed Training Sessions per Week",
-                        xaxis=dict(title="Week"),
-                        yaxis=dict(title="Number of Training Sessions", 
-                        range=[0, 7]), 
-                        template="plotly_white",
-                        bargap=0.2
-                    )
+                        # Update layout
+                        fig_sessions.update_layout(
+                            title="Number of Performed Training Sessions per Week",
+                            xaxis=dict(title="Week"),
+                            yaxis=dict(title="Number of Training Sessions", 
+                            range=[0, 7]), 
+                            template="plotly_white",
+                            bargap=0.2
+                        )
 
-                    # Display the plot
-                    st.plotly_chart(fig_sessions, use_container_width=True)
-                else:
-                    st.warning("No training session data available for this athlete.")
-
+                        # Display the plot
+                        st.plotly_chart(fig_sessions, use_container_width=True, key="plot_try")
+                    else:
+                        st.warning("No training session data available for this athlete.")
+                    
 
             else:
                 st.warning("No data available for the selected athlete.")
