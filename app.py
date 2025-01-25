@@ -53,22 +53,84 @@ def calculate_metrics(data):
     return data
 
 # Function to calculate personal records (PRs)
-def calculate_personal_records(data):
-    # Filter for the specific categories and 1 rep
-    categories_of_interest = ["Snatch", "Clean", "Jerk", "Clean and Jerk"]
-    filtered_data = data[
-        (data['Category'].isin(categories_of_interest)) & 
-        (data['Reps'] == 1)
-    ]
-    
-    # Group by Category and Exercise, find max Load (PR)
-    personal_records = (
-        filtered_data.groupby(['Category', 'Exercise'])['Load']
-        .max()
-        .reset_index()
-        .rename(columns={'Load': 'Personal Record'})
-    )
-    return personal_records
+def calculate_personal_records(data, week_name):
+    """
+    Calculate personal records (highest weight for 1 rep) for each category,
+    including the exercise variation and the file name.
+    """
+    # Define categories of interest
+    categories_of_interest = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Back Squat", "Front Squat"]
+
+    # Map alternative names for Back Squat and Front Squat
+    squat_mapping = {
+        "Front Squat": ["Front squat", "Gambe avanti"],
+        "Back Squat": ["Back squat", "Gambe dietro"]
+    }
+
+    pr_data = []
+
+    for category in categories_of_interest:
+        # Handle squats with alternative names
+        if category in squat_mapping:
+            category_data = data[data['Exercise'].isin(squat_mapping[category]) & (data['Reps'] == 1)]
+        else:
+            category_data = data[(data['Category'] == category) & (data['Reps'] == 1)]
+
+        max_weight = 0  # Initialize max weight for the category
+        exercise_name = None  # Initialize exercise name
+
+        for _, row in category_data.iterrows():
+            # Extract weights from the sets, skipping invalid or NaN values
+            weights = [
+                row.get(f'Set {i} Weight', 0)
+                for i in range(1, 9)
+                if pd.notna(row.get(f'Set {i} Weight'))
+            ]
+            if weights:  # Check if there are valid weights
+                row_max_weight = max(weights)
+                if row_max_weight > max_weight:
+                    max_weight = row_max_weight
+                    exercise_name = row['Exercise']  # Store the exercise name
+
+        if max_weight > 0:  # Only add if a valid max weight exists
+            pr_data.append({
+                'Category': category,
+                'Personal Record (1RM Weight)': max_weight,
+                'Exercise': exercise_name,
+                'File': week_name  # Add the week/file name
+            })
+
+    return pd.DataFrame(pr_data)
+
+
+def calculate_training_sessions_per_week(weeks_data, athlete_name):
+    """
+    Calculate the number of training sessions performed by the athlete for each week.
+
+    Args:
+        weeks_data (dict): Dictionary containing weekly data with athlete sheets.
+        athlete_name (str): Name of the athlete to process.
+
+    Returns:
+        pd.DataFrame: DataFrame with the week name and the number of training sessions performed.
+    """
+    sessions_per_week = []
+
+    for week_name, week_data in weeks_data.items():
+        if athlete_name in week_data:
+            athlete_data = week_data[athlete_name]
+
+            # Group by 'Day of the Week' to identify distinct training sessions
+            if 'Day of the Week' in athlete_data.columns:
+                performed_sessions = athlete_data.groupby('Day of the Week').apply(
+                    lambda group: group['Sets'].sum() > 0
+                ).sum()  # Count only sessions with prescribed sets > 0
+                sessions_per_week.append({'Week': week_name, 'Performed Sessions': int(performed_sessions)})
+            else:
+                sessions_per_week.append({'Week': week_name, 'Performed Sessions': 0})
+
+    return pd.DataFrame(sessions_per_week)
+
 
 # Athlete Overview Tab
 def athlete_overview(data):
@@ -85,13 +147,14 @@ def athlete_overview(data):
     pr_table = calculate_personal_records(data)
     
     # Display the table
-    st.table(pr_table)
+    if not pr_table.empty:
+        st.table(pr_table)
+    else:
+        st.warning("No personal records found for this athlete.")
 
 # Main App
 def main():
-    st.sidebar.title("Navigation")
-    app_mode = st.sidebar.selectbox("Choose the app section:", ["Athlete Overview", "Other Sections"])
-    
+
     # Load data (replace with your Excel files processing logic)
     data = pd.DataFrame({
         'Category': ['Snatch', 'Clean', 'Jerk', 'Clean', 'Snatch', 'Jerk', 'Clean and Jerk'],
@@ -99,11 +162,6 @@ def main():
         'Reps': [1, 1, 1, 2, 1, 1, 1],
         'Load': [90, 120, 100, 110, 95, 105, 130]
     })  # Replace with actual data loading logic
-    
-    if app_mode == "Athlete Overview":
-        athlete_overview(data)
-    else:
-        st.write("Other Sections Placeholder")
 
 # Run the app
 if __name__ == "__main__":
@@ -367,11 +425,67 @@ if folder_path:
 
                     # Show the updated plot in Streamlit
                     st.plotly_chart(fig, use_container_width=True)
+                #   Display Personal Records
+                st.subheader("Personal Records")
+                try:
+                    pr_table = pd.DataFrame()
+                    # Loop through all weeks to calculate PRs
+                    for week_name, week_data in weeks_data.items():
+                        if selected_athlete in week_data:
+                            athlete_week_data = week_data[selected_athlete]
+                            pr_week_table = calculate_personal_records(athlete_week_data, week_name)
+                            pr_table = pd.concat([pr_table, pr_week_table], ignore_index=True)
 
+                    # Drop duplicates to show only the highest PRs for each category
+                    pr_table = pr_table.sort_values(by=["Category", "Personal Record (1RM Weight)"], ascending=False)
+                    pr_table = pr_table.drop_duplicates(subset="Category", keep="first")
+
+                    # Display the PR table
+                    if not pr_table.empty:
+                        st.table(pr_table)
+                    else:
+                        st.warning("No personal records found for this athlete.")
+                except Exception as e:
+                    st.error(f"Error calculating personal records: {e}")
+
+                # Calculate the number of performed training sessions
+                sessions_per_week = calculate_training_sessions_per_week(weeks_data, selected_athlete)
+                # Add a subheader for the new plot
+                st.subheader("Training Sessions Per Week")
+
+                # Check if there is data to plot
+                if not sessions_per_week.empty:
+                    # Plot using Plotly
+                    fig_sessions = go.Figure()
+
+                    # Add a bar chart for performed training sessions
+                    fig_sessions.add_trace(
+                        go.Bar(
+                            x=sessions_per_week['Week'],
+                            y=sessions_per_week['Performed Sessions'],
+                            name='Performed Training Sessions',
+                            marker_color='green'
+                        )
+                    )
+
+                    # Update layout
+                    fig_sessions.update_layout(
+                        title="Number of Performed Training Sessions per Week",
+                        xaxis=dict(title="Week"),
+                        yaxis=dict(title="Number of Training Sessions", 
+                        range=[0, 7]), 
+                        template="plotly_white",
+                        bargap=0.2
+                    )
+
+                    # Display the plot
+                    st.plotly_chart(fig_sessions, use_container_width=True)
                 else:
-                    st.warning(f"No data available for the selected category: {selected_category}")
+                    st.warning("No training session data available for this athlete.")
+
+
             else:
-                st.write("No data available for the selected athlete.")
+                st.warning("No data available for the selected athlete.")
 
 
     except Exception as e:
