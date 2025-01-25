@@ -10,7 +10,7 @@ import os
 
 def load_data_from_folder(folder_path):
     """Load all Excel files from the specified folder as a dictionary of week-wise data."""
-    excel_files = [f for f in os.listdir(folder_path) if f.endswith('.xlsx') and (f.startswith('2025_week_') or f.startswith('2024_week_'))]
+    excel_files = [f for f in os.listdir(folder_path) if f.endswith('.xlsx') and (f.startswith('2025_') or f.startswith('2024_'))]
     weeks_data = {}
     for file in excel_files:
         week_name = file.split('.')[0]
@@ -67,8 +67,8 @@ def calculate_personal_records(data, week_name):
 
     # Map alternative names for Back Squat and Front Squat
     squat_mapping = {
-        "Front Squat": ["Front squat", "Gambe avanti"],
-        "Back Squat": ["Back squat", "Gambe dietro"]
+        "Front Squat": ["Front squat", "Front Squat", "Gambe avanti", "Gambe Avanti"],
+        "Back Squat": ["Back squat", "Back Squat", "Gambe dietro", "Gambe Dietro"]
     }
 
     pr_data = []
@@ -109,7 +109,7 @@ def calculate_personal_records(data, week_name):
 
 def calculate_training_sessions_per_week(weeks_data, athlete_name):
     """
-    Calculate the number of training sessions performed by the athlete for each week.
+    Calculate the number of training sessions actually performed by the athlete for each week.
 
     Args:
         weeks_data (dict): Dictionary containing weekly data with athlete sheets.
@@ -127,8 +127,10 @@ def calculate_training_sessions_per_week(weeks_data, athlete_name):
             # Group by 'Day of the Week' to identify distinct training sessions
             if 'Day of the Week' in athlete_data.columns:
                 performed_sessions = athlete_data.groupby('Day of the Week').apply(
-                    lambda group: group['Sets'].sum() > 0
-                ).sum()  # Count only sessions with prescribed sets > 0
+                    lambda group: any(
+                        pd.notna(group[f'Set {i} Reps']).any() for i in range(1, 9)
+                    )
+                ).sum()  # Count sessions where any set has actual completed reps
                 sessions_per_week.append({'Week': week_name, 'Performed Sessions': int(performed_sessions)})
             else:
                 sessions_per_week.append({'Week': week_name, 'Performed Sessions': 0})
@@ -176,7 +178,7 @@ def calculate_all_category_metrics(data):
     Calculate metrics for all categories of exercises, 
     only including categories with prescribed sets > 0.
     """
-    categories = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Squat", "Accessorize"]
+    categories = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Squat", "Accessory", "Clean pull", "Snatch pull" ]
     metrics = []
 
     for category in categories:
@@ -339,7 +341,7 @@ if folder_path:
 
             if not cumulated_data.empty:
                 # Select category
-                categories = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Combined C&J", "Squat", "Accessorize"]
+                categories = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Combined C&J", "Snatch pull", "Clean pull", "Squat", "Accessorize"]
                 selected_category = st.selectbox("Select a category:", categories)
 
                 # Display the plot for Average Load and Executed Sets
