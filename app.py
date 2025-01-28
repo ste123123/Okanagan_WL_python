@@ -60,7 +60,7 @@ def calculate_metrics(data):
 def calculate_personal_records(data, week_name):
     """
     Calculate personal records (highest weight for 1 rep) for each category,
-    including the exercise variation and the file name.
+    including the exercise variation and the file name. Failed reps (Reps = 0) are excluded.
     """
     # Define categories of interest
     categories_of_interest = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Back Squat", "Front Squat"]
@@ -84,11 +84,11 @@ def calculate_personal_records(data, week_name):
         exercise_name = None  # Initialize exercise name
 
         for _, row in category_data.iterrows():
-            # Extract weights from the sets, skipping invalid or NaN values
+            # Extract weights from the sets, skipping invalid, failed, or NaN values
             weights = [
                 row.get(f'Set {i} Weight', 0)
                 for i in range(1, 9)
-                if pd.notna(row.get(f'Set {i} Weight'))
+                if pd.notna(row.get(f'Set {i} Weight')) and pd.notna(row.get(f'Set {i} Reps')) and row.get(f'Set {i} Reps') > 0
             ]
             if weights:  # Check if there are valid weights
                 row_max_weight = max(weights)
@@ -105,6 +105,7 @@ def calculate_personal_records(data, week_name):
             })
 
     return pd.DataFrame(pr_data)
+
 
 
 def calculate_training_sessions_per_week(weeks_data, athlete_name):
@@ -176,17 +177,14 @@ if __name__ == "__main__":
 def calculate_all_category_metrics(data):
     """
     Calculate metrics for all categories of exercises, 
-    only including categories with prescribed sets > 0.
+    including categories with prescribed sets = 0.
     """
-    categories = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Squat", "Accessory", "Clean pull", "Snatch pull" ]
+    categories = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Squat", "Accessory", "Clean pull", "Snatch pull"]
     metrics = []
 
     for category in categories:
         category_data = data[data['Category'] == category]
         total_prescribed_sets = category_data['Sets'].sum()
-
-        if total_prescribed_sets == 0:
-            continue
 
         total_executed_sets = category_data['Total_Executed_Sets'].sum()
         total_missed_lifts = category_data['Missed Lifts'].sum()
@@ -209,10 +207,11 @@ def calculate_all_category_metrics(data):
             'Total Prescribed Sets': round(total_prescribed_sets, 2),
             'Total Executed Sets': round(total_executed_sets, 2),
             'Total Missed Lifts': round(total_missed_lifts, 2),
-            'Average Load Lifted': round(average_load, 2)
+            'Average Load Lifted': round(average_load, 2) if total_prescribed_sets > 0 else 0
         })
 
     return pd.DataFrame(metrics)
+
 
 def split_sessions(data):
     """
@@ -344,9 +343,9 @@ if folder_path:
                 categories = ["Snatch", "Clean", "Jerk", "Clean and Jerk", "Combined C&J", "Snatch pull", "Clean pull", "Squat", "Accessorize"]
                 selected_category = st.selectbox("Select a category:", categories)
 
-                # Display the plot for Average Load and Executed Sets
-                st.subheader(f"Average Load and Total Executed Sets for {selected_category}")
-                with st.expander("View Average Load", expanded=False):  # Default expanded can be set to False
+                # Display the plot for Average Load, Executed Sets, and Max Weight
+                st.subheader(f"Average Load, Total Executed Sets, and Max Weight for {selected_category}")
+                with st.expander("View Metrics", expanded=False):  # Default expanded can be set to False
                     # Filter data by category
                     if selected_category == "Combined C&J":
                         filtered_data = cumulated_data[cumulated_data['Category'].isin(["Clean", "Jerk", "Clean and Jerk"])]
@@ -356,37 +355,53 @@ if folder_path:
                     if not filtered_data.empty:
                         # Calculate total lifted weight, reps, and executed sets
                         filtered_data['Total Lifted Weight'] = filtered_data.apply(
-                            lambda row: sum((row[f'Set {i} Reps'] or 0) * (row[f'Set {i} Weight'] or 0)
-                                            for i in range(1, 9)
-                                            if pd.notna(row[f'Set {i} Reps']) and pd.notna(row[f'Set {i} Weight'])),
+                            lambda row: sum(
+                                (row[f'Set {i} Reps'] or 0) * (row[f'Set {i} Weight'] or 0)
+                                for i in range(1, 9)
+                                if pd.notna(row[f'Set {i} Reps']) and pd.notna(row[f'Set {i} Weight']) and row[f'Set {i} Reps'] > 0
+                            ),
                             axis=1
                         )
                         filtered_data['Total Reps'] = filtered_data.apply(
-                            lambda row: sum((row[f'Set {i} Reps'] or 0)
-                                            for i in range(1, 9)
-                                            if pd.notna(row[f'Set {i} Reps'])),
+                            lambda row: sum(
+                                (row[f'Set {i} Reps'] or 0)
+                                for i in range(1, 9)
+                                if pd.notna(row[f'Set {i} Reps']) and pd.notna(row[f'Set {i} Weight']) and row[f'Set {i} Reps'] > 0
+                            ),
                             axis=1
                         )
                         filtered_data['Total Executed Sets'] = filtered_data.apply(
-                            lambda row: sum(pd.notna(row[f'Set {i} Reps']) for i in range(1, 9)),
+                            lambda row: sum(
+                                pd.notna(row[f'Set {i} Reps']) and pd.notna(row[f'Set {i} Weight']) and row[f'Set {i} Reps'] > 0
+                                for i in range(1, 9)
+                            ),
                             axis=1
                         )
                         filtered_data['Average Load'] = filtered_data['Total Lifted Weight'] / filtered_data['Total Reps']
                         filtered_data['Average Load'] = filtered_data['Average Load'].fillna(0)
 
+                        # Calculate max weight for each row (ignore failed reps where reps = 0)
+                        filtered_data['Max Weight'] = filtered_data.apply(
+                            lambda row: max(
+                                [(row[f'Set {i} Weight'] or 0) for i in range(1, 9)
+                                if pd.notna(row[f'Set {i} Weight']) and pd.notna(row[f'Set {i} Reps']) and row[f'Set {i} Reps'] > 0] or [0]
+                            ),
+                            axis=1
+                        )
+
                         # Group by week
                         weekly_metrics = filtered_data.groupby('Week').agg(
                             Total_Lifted_Weight=('Total Lifted Weight', 'sum'),
                             Total_Reps=('Total Reps', 'sum'),
-                            Total_Executed_Sets=('Total Executed Sets', 'sum')
+                            Total_Executed_Sets=('Total Executed Sets', 'sum'),
+                            Max_Weight=('Max Weight', 'max')  # Personal record for the week
                         ).reset_index()
 
                         # Calculate weighted average load
                         weekly_metrics['Average_Load'] = weekly_metrics['Total_Lifted_Weight'] / weekly_metrics['Total_Reps']
                         weekly_metrics['Average_Load'] = weekly_metrics['Average_Load'].fillna(0)  # Handle cases with 0 reps
-                        
+
                         # Plot using Plotly
-                        
                         fig = go.Figure()
 
                         # Add Average Load as a line (left y-axis)
@@ -397,6 +412,17 @@ if folder_path:
                                 mode='lines+markers',
                                 name='Average Load',
                                 line=dict(color='blue'),
+                                yaxis='y'
+                            )
+                        )
+                                                # Add Max Weight as a line (left y-axis, black color)
+                        fig.add_trace(
+                            go.Scatter(
+                                x=weekly_metrics['Week'],
+                                y=weekly_metrics['Max_Weight'],
+                                mode='markers',  # Change to only show markers
+                                name='Weekly max',
+                                marker=dict(color='red', size=10),  # Set marker color and size
                                 yaxis='y'
                             )
                         )
@@ -415,10 +441,10 @@ if folder_path:
 
                         # Update layout for dual y-axes
                         fig.update_layout(
-                            title=f"Average Load and Total Executed Sets for {selected_category} Over Time",
+                            title=f"Average Load, Total Executed Sets, and Max Load for {selected_category} Over Time",
                             xaxis=dict(title='Week'),
                             yaxis=dict(
-                                title='Average Load',
+                                title='Average Load / Max Weight',
                                 titlefont=dict(color='blue'),
                                 tickfont=dict(color='blue'),
                                 showgrid=True
@@ -431,14 +457,17 @@ if folder_path:
                                 side='right',
                                 showgrid=False
                             ),
-                            legend=dict(x=0.01, y=0.99),
+                            legend=dict(x=1.02, y=1),
                             template='plotly_white',
-                            bargap=0.2
+                            bargap=0.5
                         )
 
                         # Show the updated plot in Streamlit
                         st.plotly_chart(fig, use_container_width=True)
-                    #   Display Personal Records
+
+
+
+                #   Display Personal Records
                 st.subheader("Personal Records")
                 with st.expander("View Personal Records", expanded=False):  # Default expanded can be set to False
                     try:
