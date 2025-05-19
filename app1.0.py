@@ -77,17 +77,17 @@ if 'athlete_file' in locals() and athlete_file:
         week_group['Average_Load'] = week_group['Total_Lifted_Weight'] / week_group['Total_Reps']
         week_group['Average_Load'] = week_group['Average_Load'].fillna(0)
         fig = go.Figure()
-        # Prescribed sets bar (grey, alpha 0.5)
-        fig.add_trace(go.Bar(x=week_group['Week'], y=week_group['Total_Prescribed_Sets'], name='Prescribed Sets', marker_color='grey', opacity=0.5, yaxis='y2'))
-        # Executed sets bar (orange, alpha 0.6)
-        fig.add_trace(go.Bar(x=week_group['Week'], y=week_group['Total_Executed_Sets'], name='Executed Sets', marker_color='orange', opacity=0.6, yaxis='y2'))
-        fig.add_trace(go.Scatter(x=week_group['Week'], y=week_group['Average_Load'], mode='lines+markers', name='Average Load', line=dict(color='blue'), yaxis='y'))
-        fig.add_trace(go.Scatter(x=week_group['Week'], y=week_group['Max_Weight'], mode='markers', name='Weekly max', marker=dict(color='red', size=10), yaxis='y'))
+        # Bars on primary y-axis
+        fig.add_trace(go.Bar(x=week_group['Week'], y=week_group['Total_Prescribed_Sets'], name='Prescribed Sets', marker_color='grey', opacity=0.5))
+        fig.add_trace(go.Bar(x=week_group['Week'], y=week_group['Total_Executed_Sets'], name='Executed Sets', marker_color='orange', opacity=0.6))
+        # Lines on secondary y-axis
+        fig.add_trace(go.Scatter(x=week_group['Week'], y=week_group['Average_Load'], mode='lines+markers', name='Average Load', line=dict(color='blue'), yaxis='y2'))
+        fig.add_trace(go.Scatter(x=week_group['Week'], y=week_group['Max_Weight'], mode='markers', name='Weekly max', marker=dict(color='red', size=10), yaxis='y2'))
         fig.update_layout(
             title=f"Average Load, Executed vs Prescribed Sets, and Max Load for {selected_category} Over Time",
             xaxis=dict(title='Week'),
-            yaxis=dict(title='Average Load / Max Weight', titlefont=dict(color='blue'), tickfont=dict(color='blue'), showgrid=True),
-            yaxis2=dict(title='Sets', titlefont=dict(color='orange'), tickfont=dict(color='orange'), overlaying='y', side='right', showgrid=False),
+            yaxis=dict(title='Sets', titlefont=dict(color='orange'), tickfont=dict(color='orange'), showgrid=True),
+            yaxis2=dict(title='Average Load / Max Weight', titlefont=dict(color='blue'), tickfont=dict(color='blue'), overlaying='y', side='right', showgrid=False),
             legend=dict(x=1.02, y=1),
             template='plotly_white',
             bargap=0.5
