@@ -70,10 +70,14 @@ if 'athlete_file' in locals() and athlete_file:
         prescribed_df['Week'] = prescribed_df['Week'].astype(str)
         prescribed_sets = prescribed_df.groupby('Week').apply(lambda x: x.drop_duplicates(subset=['Day of the Week', 'Set']).shape[0]).reset_index(name='Total_Prescribed_Sets')
         prescribed_sets = prescribed_sets.set_index('Week').reindex(all_weeks, fill_value=0).reset_index()
-        # Executed sets: only rows with Set, Set_Reps, Set_Weight not null
+        # Executed sets: only rows with Set, Set_Reps, Set_Weight not null and Set_Reps > 0 (exclude missed lifts)
         executed_mask = (
-            df['Category'] == selected_category
-        ) & df['Set'].notna() & df['Set_Reps'].notna() & df['Set_Weight'].notna()
+            (df['Category'] == selected_category)
+            & df['Set'].notna()
+            & df['Set_Reps'].notna()
+            & (df['Set_Reps'] > 0)
+            & df['Set_Weight'].notna()
+        )
         cat_df = df[executed_mask]
         cat_df['Week'] = cat_df['Week'].astype(str)
         executed_sets = cat_df.groupby('Week').agg(
