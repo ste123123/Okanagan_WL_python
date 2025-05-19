@@ -1,6 +1,21 @@
 import streamlit as st
 st.set_page_config(layout="wide")
 
+# --- Simple password protection ---
+PASSWORD = "!EASY_WEIGHT!1234!"
+if 'authenticated' not in st.session_state:
+    st.session_state['authenticated'] = False
+if not st.session_state['authenticated']:
+    st.title("Athlete Training Progress Viewer (Aggregated)")
+    pw = st.text_input("Enter password to access the app:", type="password")
+    if pw == PASSWORD:
+        st.session_state['authenticated'] = True
+        st.rerun()
+    elif pw:
+        st.error("Incorrect password. Please try again.")
+    st.stop()
+# --- End password protection ---
+
 import pandas as pd
 import os
 import plotly.graph_objects as go
