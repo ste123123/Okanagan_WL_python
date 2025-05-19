@@ -70,10 +70,10 @@ if 'athlete_file' in locals() and athlete_file:
         prescribed_df['Week'] = prescribed_df['Week'].astype(str)
         prescribed_sets = prescribed_df.groupby('Week').apply(lambda x: x.drop_duplicates(subset=['Day of the Week', 'Set']).shape[0]).reset_index(name='Total_Prescribed_Sets')
         prescribed_sets = prescribed_sets.set_index('Week').reindex(all_weeks, fill_value=0).reset_index()
-        # Executed sets: only rows with Set, Set_Reps, Set_Weight not null and Set_Reps > 0 (exclude missed lifts)
+        # Executed sets: only rows with Set, Set_Reps, Set_Weight not null
         executed_mask = (
             df['Category'] == selected_category
-        ) & df['Set'].notna() & df['Set_Reps'].notna() & (df['Set_Reps'] > 0) & df['Set_Weight'].notna()
+        ) & df['Set'].notna() & df['Set_Reps'].notna() & df['Set_Weight'].notna()
         cat_df = df[executed_mask]
         cat_df['Week'] = cat_df['Week'].astype(str)
         executed_sets = cat_df.groupby('Week').agg(
@@ -109,10 +109,15 @@ if 'athlete_file' in locals() and athlete_file:
         )
         st.plotly_chart(fig, use_container_width=True)
     with st.expander("Personal Records (1RM)", expanded=False):
-        pr_df = df[df['Set_Reps'] == 1]
-        pr_table = pr_df.groupby('Category').agg(
-            Personal_Record_1RM_Weight=('Set_Weight', 'max'),
-            Week=('Week', 'first'),
-            Exercise=('Exercise', 'first')
-        ).reset_index()
+        # Only consider rows where Set_Reps == 1 and Set_Weight is not null and > 0
+        pr_df = df[(df['Set_Reps'] == 1) & (df['Set_Weight'].notna()) & (df['Set_Weight'] > 0)]
+        # Find PR for each category and get the corresponding week and exercise
+        pr_table = (
+            pr_df.loc[pr_df.groupby('Category')['Set_Weight'].idxmax()]
+            .groupby('Category')
+            .agg(Personal_Record_1RM_Weight=('Set_Weight', 'max'),
+                 Week=('Week', 'first'),
+                 Exercise=('Exercise', 'first'))
+            .reset_index()
+        )
         st.dataframe(pr_table)
