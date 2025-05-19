@@ -151,7 +151,7 @@ def athlete_overview(data):
     st.header("Personal Records")
     
     # Calculate personal records
-    pr_table = calculate_personal_records(data)
+    pr_table = calculate_personal_records(data, "Unknown")  # Replace "Unknown" with the actual week name if available
     
     # Display the table
     if not pr_table.empty:
@@ -202,7 +202,7 @@ def calculate_all_category_metrics(data):
         )
         average_load = round(total_lifted_weight / total_reps, 2) if total_reps > 0 else 0
 
-        metrics.append({
+        metrics.append({    
             'Category': category,
             'Total Prescribed Sets': round(total_prescribed_sets, 2),
             'Total Executed Sets': round(total_executed_sets, 2),
