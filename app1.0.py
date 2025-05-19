@@ -86,8 +86,8 @@ if 'athlete_file' in locals() and athlete_file:
         fig.update_layout(
             title=f"Average Load, Executed vs Prescribed Sets, and Max Load for {selected_category} Over Time",
             xaxis=dict(title='Week'),
-            yaxis=dict(title='Sets', titlefont=dict(color='orange'), tickfont=dict(color='orange'), showgrid=True),
-            yaxis2=dict(title='Average Load / Max Weight', titlefont=dict(color='blue'), tickfont=dict(color='blue'), overlaying='y', side='right', showgrid=False),
+            yaxis=dict(title='Sets', tickfont=dict(color='orange'), showgrid=True),
+            yaxis2=dict(title='Average Load / Max Weight', tickfont=dict(color='blue'), overlaying='y', side='right', showgrid=False),
             legend=dict(x=1.02, y=1),
             template='plotly_white',
             bargap=0.5
