@@ -146,7 +146,9 @@ if 'athlete_file' in locals() and athlete_file:
                 "Front Squat": "Front Squat",
                 "Gambe Avanti": "Front Squat",
                 "Tirate Slancio": "Tirate Slancio",
-                "Tirata Slancio": "Tirate Slancio"
+                "Tirata Slancio": "Tirate Slancio",
+                "Spinta": "Spinta in spaccata",
+                "Spinta in Spaccata": "Spinta in spaccata",
                 # Add more mappings as needed
             }
             df['Exercise'] = df['Exercise'].replace(EXERCISE_MAPPING)
