@@ -125,3 +125,55 @@ if 'athlete_file' in locals() and athlete_file:
             .reset_index()
         )
         st.dataframe(pr_table)
+    # --- New Section: Exercise Search and Display ---
+    with st.expander("Search Exercise Data", expanded=False):
+        if 'Exercise' in df.columns and 'Category' in df.columns:
+            # Standardize exercise and category names
+            df['Exercise'] = df['Exercise'].astype(str).str.strip().str.title()
+            df['Category'] = df['Category'].astype(str).str.strip().str.title()
+            # Mapping for exercise name variants
+            EXERCISE_MAPPING = {
+                "Strappo Da Terra": "Strappo",
+                "Strappo": "Strappo",
+                "Back Squat": "Back Squat",
+                "Back Squat": "Gambe Dietro",
+                "Front Squat": "Front Squat",
+                "Front Squat": "Gambe Avanti"
+                # Add more mappings as needed
+            }
+            df['Exercise'] = df['Exercise'].replace(EXERCISE_MAPPING)
+            # Dropdown for category selection
+            unique_categories = sorted(df['Category'].dropna().unique())
+            selected_category = st.selectbox(
+                "Select a category to filter exercises:",
+                unique_categories,
+                key="category_search_box"
+            )
+            # Filter exercises by selected category
+            filtered_exercises = df[df['Category'] == selected_category]['Exercise'].dropna().unique()
+            unique_exercises = sorted(filtered_exercises)
+            selected_exercise = st.selectbox(
+                "Type or select an exercise:",
+                unique_exercises,
+                key="exercise_search_box"
+            )
+            if selected_exercise:
+                exercise_df = df[(df['Category'] == selected_category) & (df['Exercise'] == selected_exercise)]
+                # Filter out rows where both Set_Reps and Set_Weight are empty or NaN
+                exercise_df = exercise_df[~(exercise_df['Set_Reps'].isna() & exercise_df['Set_Weight'].isna())]
+                # Add input for filtering by number of reps
+                reps_filter = st.number_input(
+                    "Filter by number of reps (leave empty or 0 to show all):",
+                    min_value=0, step=1, value=0, key="reps_filter_box"
+                )
+                if reps_filter > 0:
+                    exercise_df = exercise_df[exercise_df['Set_Reps'] == reps_filter]
+                st.subheader(f"All sets for Exercise: {selected_exercise} in Category: {selected_category}")
+                st.markdown("Each row below represents a single set for the selected exercise.")
+                # Show only selected columns
+                display_cols = ["Week", "Day of the Week", "Exercise", "Set_Reps", "Set_Weight"]
+                filtered_exercise_df = exercise_df[display_cols] if all(col in exercise_df.columns for col in display_cols) else exercise_df
+                st.dataframe(filtered_exercise_df)
+        else:
+            st.info("No 'Exercise' or 'Category' column found in the data.")
+    # --- End New Section ---
