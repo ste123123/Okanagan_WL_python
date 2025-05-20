@@ -28,7 +28,12 @@ def get_athlete_files():
     files = [f for f in os.listdir(AGGREGATED_DIR) if f.endswith('.csv')]
     return files
 athlete_files = get_athlete_files()
-athlete_file = st.selectbox("Select athlete:", athlete_files)
+# Sort athlete files alphabetically (removing .csv for display)
+athlete_files_sorted = sorted(athlete_files, key=lambda x: x.lower())
+athlete_names = [f.replace('.csv', '') for f in athlete_files_sorted]
+athlete_file_display = st.selectbox("Select athlete:", athlete_names)
+# Map back to filename for loading
+athlete_file = athlete_file_display + '.csv' if athlete_file_display else None
 
 if 'athlete_file' in locals() and athlete_file:
     df = pd.read_csv(os.path.join(AGGREGATED_DIR, athlete_file))
