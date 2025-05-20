@@ -30,10 +30,11 @@ def get_athlete_files():
 athlete_files = get_athlete_files()
 # Sort athlete files alphabetically (removing .csv for display)
 athlete_files_sorted = sorted(athlete_files, key=lambda x: x.lower())
-athlete_names = [f.replace('.csv', '') for f in athlete_files_sorted]
+# Replace underscores with spaces and remove .csv for display
+athlete_names = [f.replace('.csv', '').replace('_', ' ') for f in athlete_files_sorted]
 athlete_file_display = st.selectbox("Select athlete:", athlete_names)
-# Map back to filename for loading
-athlete_file = athlete_file_display + '.csv' if athlete_file_display else None
+# Map back to filename for loading (restore underscores)
+athlete_file = athlete_file_display.replace(' ', '_') + '.csv' if athlete_file_display else None
 
 if 'athlete_file' in locals() and athlete_file:
     df = pd.read_csv(os.path.join(AGGREGATED_DIR, athlete_file))
