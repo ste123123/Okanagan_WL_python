@@ -140,6 +140,23 @@ if 'athlete_file' in locals() and athlete_file:
         week_group['Average_Load'] = week_group['Average_Load'].fillna(0)
         # Add Week_Label for plotting
         week_group['Week_Label'] = week_group['Week'].map(week_label_map)
+        # Add week range slider for filtering
+        week_label_list = [week_label_map[w] for w in all_weeks]
+        if len(week_label_list) > 1:
+            week_range = st.slider(
+                "Select week range to display:",
+                min_value=0,
+                max_value=len(week_label_list)-1,
+                value=(0, len(week_label_list)-1),
+                format="",
+                step=1,
+                key="week_range_slider"
+            )
+            start_idx, end_idx = week_range
+            selected_labels = week_label_list[start_idx:end_idx+1]
+            selected_weeks = [w for w, lbl in week_label_map.items() if lbl in selected_labels]
+            # Filter week_group to selected weeks
+            week_group = week_group[week_group['Week'].isin(selected_weeks)]
         fig = go.Figure()
         # Bars on primary y-axis
         fig.add_trace(go.Bar(x=week_group['Week_Label'], y=week_group['Total_Prescribed_Sets'], name='Prescribed Sets', marker_color='grey', opacity=0.5))
