@@ -19,6 +19,7 @@ if not st.session_state['authenticated']:
 import pandas as pd
 import os
 import plotly.graph_objects as go
+import datetime
 
 AGGREGATED_DIR = "aggregated_athletes"
 
@@ -48,9 +49,29 @@ if 'athlete_file' in locals() and athlete_file:
         df['Volume'] = df['Set_Reps'] * df['Set_Weight']
     with st.expander("Data for Week", expanded=False):
         weeks = sorted(df['Week'].dropna().unique())
-        selected_week = st.selectbox("Select week:", weeks)
+        # Map week codes to date ranges
+        def week_code_to_range(week_code):
+            try:
+                year, week = map(int, str(week_code).split('_'))
+                # ISO week: Monday is the first day of the week
+                start_date = datetime.date.fromisocalendar(year, week, 1)
+                end_date = start_date + datetime.timedelta(days=6)
+                # Format: 2025 Dec 29th - Jan 04th
+                def suffix(day):
+                    return 'th' if 11<=day<=13 else {1:'st',2:'nd',3:'rd'}.get(day%10, 'th')
+                start_str = start_date.strftime(f"%b {start_date.day}{suffix(start_date.day)}")
+                end_str = end_date.strftime(f"%b {end_date.day}{suffix(end_date.day)}")
+                if start_date.year != end_date.year:
+                    end_str = end_date.strftime(f"%Y %b {end_date.day}{suffix(end_date.day)}")
+                return f"{year} {start_str} - {end_str}"
+            except Exception:
+                return str(week_code)
+        week_labels = [week_code_to_range(w) for w in weeks]
+        week_map = dict(zip(week_labels, weeks))
+        selected_week_label = st.selectbox("Select week:", week_labels)
+        selected_week = week_map[selected_week_label]
         week_df = df[df['Week'] == selected_week]
-        st.subheader(f"Data for Week: {selected_week}")
+        st.subheader(f"Data for Week: {selected_week_label}")
         st.dataframe(week_df)
         # Calculate volume per set
         week_df['Volume'] = week_df['Set_Reps'] * week_df['Set_Weight']
@@ -69,6 +90,22 @@ if 'athlete_file' in locals() and athlete_file:
         selected_category = st.selectbox("Select a category:", prescribed_categories)
         # All unique weeks in the dataset
         all_weeks = sorted(df['Week'].dropna().astype(str).unique())
+        # Map week codes to date ranges for plotting
+        def week_code_to_range(week_code):
+            try:
+                year, week = map(int, str(week_code).split('_'))
+                start_date = datetime.date.fromisocalendar(year, week, 1)
+                end_date = start_date + datetime.timedelta(days=6)
+                def suffix(day):
+                    return 'th' if 11<=day<=13 else {1:'st',2:'nd',3:'rd'}.get(day%10, 'th')
+                start_str = start_date.strftime(f"%b {start_date.day}{suffix(start_date.day)}")
+                end_str = end_date.strftime(f"%b {end_date.day}{suffix(end_date.day)}")
+                if start_date.year != end_date.year:
+                    end_str = end_date.strftime(f"%Y %b {end_date.day}{suffix(end_date.day)}")
+                return f"{year} {start_str} - {end_str}"
+            except Exception:
+                return str(week_code)
+        week_label_map = {w: week_code_to_range(w) for w in all_weeks}
         # Prescribed sets: count unique (Day of the Week, Set) pairs for the selected category
         prescribed_mask = (df['Category'] == selected_category)
         prescribed_df = df[prescribed_mask]
@@ -101,13 +138,15 @@ if 'athlete_file' in locals() and athlete_file:
         week_group['Max_Weight'] = week_group['Max_Weight'].fillna(0)
         week_group['Average_Load'] = week_group['Total_Lifted_Weight'] / week_group['Total_Reps']
         week_group['Average_Load'] = week_group['Average_Load'].fillna(0)
+        # Add Week_Label for plotting
+        week_group['Week_Label'] = week_group['Week'].map(week_label_map)
         fig = go.Figure()
         # Bars on primary y-axis
-        fig.add_trace(go.Bar(x=week_group['Week'], y=week_group['Total_Prescribed_Sets'], name='Prescribed Sets', marker_color='grey', opacity=0.5))
-        fig.add_trace(go.Bar(x=week_group['Week'], y=week_group['Total_Executed_Sets'], name='Executed Sets', marker_color='orange', opacity=0.6))
+        fig.add_trace(go.Bar(x=week_group['Week_Label'], y=week_group['Total_Prescribed_Sets'], name='Prescribed Sets', marker_color='grey', opacity=0.5))
+        fig.add_trace(go.Bar(x=week_group['Week_Label'], y=week_group['Total_Executed_Sets'], name='Executed Sets', marker_color='orange', opacity=0.6))
         # Lines on secondary y-axis
-        fig.add_trace(go.Scatter(x=week_group['Week'], y=week_group['Average_Load'], mode='lines+markers', name='Average Load', line=dict(color='blue'), yaxis='y2'))
-        fig.add_trace(go.Scatter(x=week_group['Week'], y=week_group['Max_Weight'], mode='markers', name='Weekly max', marker=dict(color='red', size=10), yaxis='y2'))
+        fig.add_trace(go.Scatter(x=week_group['Week_Label'], y=week_group['Average_Load'], mode='lines+markers', name='Average Load', line=dict(color='blue'), yaxis='y2'))
+        fig.add_trace(go.Scatter(x=week_group['Week_Label'], y=week_group['Max_Weight'], mode='markers', name='Weekly max', marker=dict(color='red', size=10), yaxis='y2'))
         fig.update_layout(
             title=f"Average Load, Executed vs Prescribed Sets, and Max Load for {selected_category} Over Time",
             xaxis=dict(title='Week'),
