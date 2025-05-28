@@ -181,7 +181,7 @@ if 'athlete_file' in locals() and athlete_file:
                 st.subheader(f"All sets for Exercise: {selected_exercise} in Category: {selected_category}")
                 st.markdown("Each row below represents a single set for the selected exercise.")
                 # Show only selected columns
-                display_cols = ["Week", "Day of the Week", "Exercise", "Set_Reps", "Set_Weight"]
+                display_cols = ["Week", "Day of the Week", "Exercise", "Variant", "Set_Reps", "Set_Weight"]
                 filtered_exercise_df = exercise_df[display_cols] if all(col in exercise_df.columns for col in display_cols) else exercise_df
                 st.dataframe(filtered_exercise_df)
         else:
