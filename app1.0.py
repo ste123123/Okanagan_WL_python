@@ -87,7 +87,16 @@ if 'athlete_file' in locals() and athlete_file:
     with st.expander("Trends by Category (All Weeks)", expanded=False):
         # Use all prescribed categories for the selector (not just those with executed sets)
         prescribed_categories = sorted(df[df['Set'].notna() & df['Set_Reps'].notna()]['Category'].dropna().unique())
-        selected_category = st.selectbox("Select a category:", prescribed_categories)
+        # Exclude 'Accessory' and 'Accessorio' from prescribed_categories
+        prescribed_categories = [cat for cat in prescribed_categories if cat.lower() not in ['accessory', 'accessorio']]
+        # Add virtual 'Pulls' category if both 'Snatch Pull' and 'Clean Pull' exist
+        pulls_present = any(cat.lower() == 'snatch pull' for cat in prescribed_categories) and any(cat.lower() == 'clean pull' for cat in prescribed_categories)
+        display_categories = prescribed_categories.copy()
+        if pulls_present:
+            display_categories.append('Pulls')
+        # Add 'Overall' as the first category (all except Accessory/Accessorio)
+        display_categories = ['Overall'] + display_categories
+        selected_category = st.selectbox("Select a category:", display_categories)
         # All unique weeks in the dataset
         all_weeks = sorted(df['Week'].dropna().astype(str).unique())
         # Map week codes to date ranges for plotting
@@ -106,21 +115,44 @@ if 'athlete_file' in locals() and athlete_file:
             except Exception:
                 return str(week_code)
         week_label_map = {w: week_code_to_range(w) for w in all_weeks}
-        # Prescribed sets: count unique (Day of the Week, Set) pairs for the selected category
-        prescribed_mask = (df['Category'] == selected_category)
+        # --- Category filtering logic ---
+        if selected_category == 'Pulls':
+            pulls_mask = df['Category'].str.lower().isin(['snatch pull', 'clean pull'])
+            prescribed_mask = pulls_mask
+        elif selected_category == 'Overall':
+            prescribed_mask = ~df['Category'].str.lower().isin(['accessory', 'accessorio'])
+        else:
+            prescribed_mask = (df['Category'] == selected_category)
         prescribed_df = df[prescribed_mask]
         prescribed_df = prescribed_df[prescribed_df['Set'].notna() & prescribed_df['Set_Reps'].notna()]
         prescribed_df['Week'] = prescribed_df['Week'].astype(str)
         prescribed_sets = prescribed_df.groupby('Week').apply(lambda x: x.drop_duplicates(subset=['Day of the Week', 'Set']).shape[0]).reset_index(name='Total_Prescribed_Sets')
         prescribed_sets = prescribed_sets.set_index('Week').reindex(all_weeks, fill_value=0).reset_index()
         # Executed sets: only rows with Set, Set_Reps, Set_Weight not null and Set_Reps > 0 (exclude missed lifts)
-        executed_mask = (
-            (df['Category'] == selected_category)
-            & df['Set'].notna()
-            & df['Set_Reps'].notna()
-            & (df['Set_Reps'] > 0)
-            & df['Set_Weight'].notna()
-        )
+        if selected_category == 'Pulls':
+            executed_mask = (
+                df['Category'].str.lower().isin(['snatch pull', 'clean pull'])
+                & df['Set'].notna()
+                & df['Set_Reps'].notna()
+                & (df['Set_Reps'] > 0)
+                & df['Set_Weight'].notna()
+            )
+        elif selected_category == 'Overall':
+            executed_mask = (
+                ~df['Category'].str.lower().isin(['accessory', 'accessorio'])
+                & df['Set'].notna()
+                & df['Set_Reps'].notna()
+                & (df['Set_Reps'] > 0)
+                & df['Set_Weight'].notna()
+            )
+        else:
+            executed_mask = (
+                (df['Category'] == selected_category)
+                & df['Set'].notna()
+                & df['Set_Reps'].notna()
+                & (df['Set_Reps'] > 0)
+                & df['Set_Weight'].notna()
+            )
         cat_df = df[executed_mask]
         cat_df['Week'] = cat_df['Week'].astype(str)
         executed_sets = cat_df.groupby('Week').agg(
@@ -140,7 +172,7 @@ if 'athlete_file' in locals() and athlete_file:
         week_group['Average_Load'] = week_group['Average_Load'].fillna(0)
         # Add Week_Label for plotting
         week_group['Week_Label'] = week_group['Week'].map(week_label_map)
-        # Add week range slider for filtering
+        # Add week range slider for filtering (below the plot)
         week_label_list = [week_label_map[w] for w in all_weeks]
         if len(week_label_list) > 1:
             week_range = st.slider(
@@ -157,11 +189,10 @@ if 'athlete_file' in locals() and athlete_file:
             selected_weeks = [w for w, lbl in week_label_map.items() if lbl in selected_labels]
             # Filter week_group to selected weeks
             week_group = week_group[week_group['Week'].isin(selected_weeks)]
+        # Plot (only once, after filtering)
         fig = go.Figure()
-        # Bars on primary y-axis
         fig.add_trace(go.Bar(x=week_group['Week_Label'], y=week_group['Total_Prescribed_Sets'], name='Prescribed Sets', marker_color='grey', opacity=0.5))
         fig.add_trace(go.Bar(x=week_group['Week_Label'], y=week_group['Total_Executed_Sets'], name='Executed Sets', marker_color='orange', opacity=0.6))
-        # Lines on secondary y-axis
         fig.add_trace(go.Scatter(x=week_group['Week_Label'], y=week_group['Average_Load'], mode='lines+markers', name='Average Load', line=dict(color='blue'), yaxis='y2'))
         fig.add_trace(go.Scatter(x=week_group['Week_Label'], y=week_group['Max_Weight'], mode='markers', name='Weekly max', marker=dict(color='red', size=10), yaxis='y2'))
         fig.update_layout(
