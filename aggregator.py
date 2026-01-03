@@ -8,7 +8,7 @@ SET_COUNT = 8  # Number of sets per row
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Find all Excel files in the raw data directory
-excel_files = [f for f in os.listdir(RAW_DATA_DIR) if f.endswith('.xlsx') and (f.startswith('2025_') or f.startswith('2024_'))]
+excel_files = [f for f in os.listdir(RAW_DATA_DIR) if f.endswith('.xlsx') and (f.startswith('2025_') or f.startswith('2024_') or f.startswith('2026_'))]
 
 athlete_data = {}
 
